@@ -26,7 +26,6 @@
 #include <rte_udp.h>
 #include <rte_tcp.h>
 
-
 #include "pm.h"
 #include "tload.h"
 #include "tx_mp.h"
@@ -37,20 +36,16 @@
 #define NB_MBUF 65535
 #define MBUF_CACHE_SIZE 512
 #define NB_BURST 32//debug , original value is 32
-#define NB_TXQ 2
+#define NB_TXQ 1
 #define NB_RXQ 1
 
 #define NB_RXD_DFT 4096//debug, original value is 128
-#define NB_TXD_DFT 512//debug, original value is 512
+#define NB_TXD_DFT 4096//debug, original value is 512
 #define NB_TEST 10000
 const int nb_rxd = NB_RXD_DFT;
 const int nb_txd = NB_TXD_DFT;
-static int send_turn=0;//max send round
-static int lcore_cur_turn[10]={0,0,0,0,0,0,0,0,0,0};//current send round for each lcore
-static int lcore_end[10]={0,0,0,0,0,0,0,0,0,0};//signal of end sending for each lcore
 FILE * res_fp;//res data file
 const int max_test_nb = 10000;
-static int __attribute__((unused)) cur_test_round=0;
 
 //pp test var
 #define PP_TEST 1
@@ -95,39 +90,50 @@ static void parse_params(int argc, char **argv)
 {
     char opt;
     int accept = 0;
+
 #ifndef PP_TEST
 		char res_path[256]="";
 #endif
-    while((opt = getopt(argc, argv, "t:s:L:T:")) != -1)
+
+    while((opt = getopt(argc, argv, "t:s:L:")) != -1)
     {
         switch(opt)
         {
-            case 't': rte_memcpy(ginfo.trace_file, optarg, strlen(optarg)+1); accept = 1; break;
+            case 't': printf("--->PP-DBG:Trace file=%s\n", optarg);
+											rte_memcpy(ginfo.trace_file, optarg, strlen(optarg)+1); 
+											accept = 1; 
+											break;
             case 's': ginfo.Mbps = atoi(optarg);
+
                       if(ginfo.Mbps <= 0)
                       {
                           rte_exit(EINVAL, "tx rate (Mbps) is invalid!\n");
                       }
+
+											printf("--->PP-DBG:Send rate set to %lluMbps\n", (unsigned long long)ginfo.Mbps);
 #ifndef PP_TEST
-/*res_data file*/
-					  sprintf(res_path, "res_%lu", ginfo.Mbps);
-					  res_fp = fopen(res_path, "w");
-					  if(res_fp == NULL)
-					  {
-						  perror("Can not open res file");
-						  exit(1);
-					  }
+											/*res_data file*/
+					  					sprintf(res_path, "res_%lu", ginfo.Mbps);
+					 						res_fp = fopen(res_path, "w");
+					 					  if(res_fp == NULL)
+					 					  {
+					 					    perror("Can not open res file");
+					 					    exit(1);
+					 					  }
 #endif
                       break;
             case 'L':
-                      pkt_length = atoi(optarg);
+                      pkt_length = (uint32_t)atoi(optarg);
                       if(pkt_length < 64)
                       {
                           rte_exit(EINVAL, "pkt_length should be no less than 64!\n");
                       }
+
+											printf("--->PP-DBG:Pkt size is %uB\n", pkt_length);
+
                       break;
-			case 'T': send_turn = atoi(optarg);break;
             default: usage();
+											break;
         }
     }
     if(!accept)
@@ -139,14 +145,14 @@ static void parse_params(int argc, char **argv)
 /**************************************************************/
 
 /* port init */
-struct rte_eth_conf port_conf;
-//struct rte_eth_conf port_conf =
-//{
-//    .rxmode=
-//    {
-//        .max_rx_pkt_len=ETHER_MAX_LEN,
-//    },
-//};
+struct rte_eth_conf port_conf =
+{
+    .rxmode=
+    {
+        .max_rx_pkt_len=ETHER_MAX_LEN,
+				.mq_mode = ETH_MQ_RX_RSS,//rss
+    },
+};
 
 /* don't care about NUMA */
 static int all_port_setup(struct rte_mempool *mp)
@@ -156,12 +162,11 @@ static int all_port_setup(struct rte_mempool *mp)
     int port_id;
     int queue_id;
     nb_ports = rte_eth_dev_count();
-	port_conf.rxmode.max_rx_pkt_len = ETHER_MAX_LEN;
-	
-	//debug, tx & rx conf, dev_info
-	struct rte_eth_dev_info dev_info;
-	struct rte_eth_txconf *tx_conf;
-	struct rte_eth_rxconf *rx_conf;
+		
+		//debug, tx & rx conf, dev_info
+		struct rte_eth_dev_info dev_info;
+		struct rte_eth_txconf *tx_conf;
+		struct rte_eth_rxconf *rx_conf;
 
     for(port_id = 0; port_id < nb_ports; port_id++)
     {
@@ -172,11 +177,11 @@ static int all_port_setup(struct rte_mempool *mp)
         }
         for(queue_id = 0; queue_id < NB_TXQ; queue_id++)
         {
-			//modify tx thresh
-			rte_eth_dev_info_get(port_id, &dev_info);					
-			tx_conf = &dev_info.default_txconf;
-	//		tx_conf->tx_rs_thresh = 1024;
-	//		tx_conf->tx_free_thresh = 1024;			
+						//modify tx thresh
+						rte_eth_dev_info_get(port_id, &dev_info);					
+						tx_conf = &dev_info.default_txconf;
+	//				tx_conf->tx_rs_thresh = 1024;
+	//				tx_conf->tx_free_thresh = 1024;			
 
             ret = rte_eth_tx_queue_setup(port_id, queue_id, nb_txd, rte_eth_dev_socket_id(port_id), tx_conf);
             if(ret != 0)
@@ -186,9 +191,9 @@ static int all_port_setup(struct rte_mempool *mp)
         }
         for(queue_id = 0; queue_id < NB_RXQ; queue_id++)
         {
-			//modify rx thresh
-			rte_eth_dev_info_get(port_id, &dev_info);
-			rx_conf = &dev_info.default_rxconf;
+						//modify rx thresh
+						rte_eth_dev_info_get(port_id, &dev_info);
+						rx_conf = &dev_info.default_rxconf;
 
             ret = rte_eth_rx_queue_setup(port_id, queue_id, nb_rxd, rte_eth_dev_socket_id(port_id), rx_conf, mp);
             if(ret != 0)
@@ -196,14 +201,18 @@ static int all_port_setup(struct rte_mempool *mp)
                 rte_exit(-1, "port %d rx queue setup failure!\n", port_id);
             }
         }
-        ret = rte_eth_dev_start(port_id);
+     
+		    ret = rte_eth_dev_start(port_id);
+     
         if(ret < 0)
         {
             rte_exit(-1, "port %d start failure!\n", port_id);
         }
-        rte_eth_promiscuous_enable(port_id);
+    
+		    rte_eth_promiscuous_enable(port_id);
     }
-    return nb_ports;
+   
+		 return nb_ports;
 }
 
 
@@ -264,8 +273,6 @@ static void send_pkt_rate(__rte_unused struct rte_timer *timer, void *arg)
     port_id = largs->port_id;
     queue_id = largs->tx.queue_id;
 	
-	//if(lcore_end[port_id]==1)
-	//	return;
     for(; count < NB_BURST; count++)
     {
         if(largs->trace_idx == ginfo.total_trace)
@@ -276,16 +283,12 @@ static void send_pkt_rate(__rte_unused struct rte_timer *timer, void *arg)
     }
 
     ret = rte_eth_tx_burst(port_id, queue_id, largs->tx.m_table, NB_BURST);
-//	printf("sent %d pkts\n", ret);//debug for tx_burst
-    port_stats[port_id].txq_stats[queue_id].tx_total_pkts += ret;
+    
+		port_stats[port_id].txq_stats[queue_id].tx_total_pkts += ret;
     while(ret < NB_BURST)
     {
         rte_pktmbuf_free(largs->tx.m_table[ret++]);
     }
-	lcore_cur_turn[port_id] += 1;
-	if(lcore_cur_turn[port_id]>=send_turn && send_turn>1){//if send_turn < 0, send till program ending, otherwise till cur_turn == send_turn
-		lcore_end[port_id]=1;	
-	}
 }
 
 static uint64_t calc_period(uint64_t speed)
@@ -313,12 +316,11 @@ static int sender_lcore_main(void *args)
 
     is_rx = largs->rx.is_rx_lcore;
 
-    int j;
-		int i;
+    int i, j;
     
 		if(is_rx == 0)
     {
-        printf("send packet from port %u - queue %u!\n", largs->port_id, largs->tx.queue_id);
+        printf("lcore#%u send packet from port %u - queue %u!\n", rte_lcore_id(), largs->port_id, largs->tx.queue_id);
 
         port_stats[largs->port_id].txq_stats[largs->tx.queue_id].tx_total_pkts = 0;
         port_stats[largs->port_id].txq_stats[largs->tx.queue_id].tx_last_total_pkts = 0;
@@ -338,10 +340,6 @@ static int sender_lcore_main(void *args)
     }
 
     for(;;) {
-		if(lcore_end[largs->port_id]==1)
-		{
-			return 0;
-		}
         if(is_rx) {
             for(j = 0; j < NB_RXQ; j++) {
                 ret = rte_eth_rx_burst(largs->port_id, j, rx_table, NB_BURST*8);
@@ -358,15 +356,16 @@ static int sender_lcore_main(void *args)
 									//pp test
 									pp_hdr = rte_pktmbuf_mtod(m, struct pp_hdr*);
 									
+									if(pp_hdr != NULL){
 									//check id and action
-									if(pp_hdr->id != pp_hdr->action){
-										pp_tot_error++;
-									}	
+											if(pp_hdr->id != pp_hdr->action){
+													pp_tot_error++;
+											}	
+									}
 	
 									pp_tot_recv++;
 
 								}
-								
 #else
 									//record test data for ndn test
 									ndn_hdr = rte_pktmbuf_mtod(m,struct my_ndn *);
@@ -394,6 +393,8 @@ static int sender_lcore_main(void *args)
             rte_timer_manage();
         }
     }
+
+		return 0;
 }
 
 static void print_stats(int nb_ports)
@@ -467,10 +468,6 @@ static void print_stats(int nb_ports)
 				printf("PP TEST STATISTIC: error rate = %llu/%llu\n", pp_tot_error, pp_tot_recv);
 #endif
 				
-				for(int j=0; j<10; j++){
-					if(lcore_end[j]==1)
-						printf("lcore %d send %d times then stop\n", j, send_turn);
-				}
     }
 }
 
@@ -490,28 +487,36 @@ int main(int argc, char **argv)
     {
         rte_exit(-1, "create pktmbuf pool failure!\n");
     }
-    int nb_ports;
+  
+	  int nb_ports;
     nb_ports = all_port_setup(mbuf_pool);
-    if(nb_ports <= 0)
+		printf("--->PP-DBG:%d ports load\n", nb_ports);
+    
+		if(nb_ports <= 0)
     {
         rte_exit(-1, "not detect any DPDK devices!\n");
     }
 
     int lcore_nb;
     lcore_nb = rte_lcore_count();
+		printf("--->PP-DBG:%d cores load\n", lcore_nb);
 
 //    if(lcore_nb < nb_ports * (NB_TXQ + NB_RXQ) + 1)
-    if(lcore_nb < nb_ports + 1)
+//    if(lcore_nb < nb_ports + 1)
+    if(lcore_nb < nb_ports)
     {
-        rte_exit(-1, "lcore is less than needed! (should be %d)\n", nb_ports + 1);
+        rte_exit(-1, "lcore is less than needed! (should be %d)\n", nb_ports);
     }
 //    if(lcore_nb > nb_ports * (NB_TXQ + NB_RXQ) + 1)
-    if(lcore_nb < nb_ports + 1)
+//    if(lcore_nb < nb_ports + 1)
+    if(lcore_nb < nb_ports)
     {
-        rte_exit(-1, "lcore is too much! (should be %d)\n", nb_ports + 1);
+        rte_exit(-1, "lcore is too much! (should be %d)\n", nb_ports);
     }
 
     parse_params(argc - ret, argv + ret);
+
+		printf("--->PP-DBG:Cmd parse done!\n");
 
     rte_timer_subsystem_init();
 
@@ -525,43 +530,102 @@ int main(int argc, char **argv)
 //	ret = load_test_trace(ginfo.trace_file,pms);//liguo test data 
 		ret = load_pp_trace(ginfo.trace_file, pms);
 
+		if(ret <= 0){
+				printf("Sender exit for no trace loaded...\n");
+				exit(1);		
+		}
+
     ginfo.total_trace = ret;//number of datas
+
     if(ret <= 0)
     {
         rte_exit(-1, "no invalid trace!\n");
     }
 
-    int nb_rx_lcore = nb_ports;
+    int __attribute__((unused))  nb_rx_lcore = nb_ports;
 //    int nb_tx_lcore = nb_ports * NB_TXQ;
+
+		printf("--->PP-DBG:%d ports in tatol\n", nb_ports);
     
-		int lcore_idx = 0;
     uint32_t lcore_id;
-    uint32_t port_id;
-    uint32_t queue_id;
-    port_id = queue_id = 0;
+    uint32_t rx_queue_id;
+		uint32_t tx_queue_id;
+		uint32_t core_white_list = 0xf;
+		uint32_t port_ids[9] = {0, 0, 0, 1, 1, 1, 1, 1, 1};//idx core for port_ids[idx] port
+		uint32_t is_tx_core[9] = {0, 0, 1, 0, 1, 1, 1, 1, 1};//idx core is tx core whtn is_tx_core[idx] is 1
+    
+		rx_queue_id = tx_queue_id = 0;
+
+/***************************************************
+*	pp test
+* core 0 is master core
+*	core 1 for 0 rx queue on port 0
+*	core 2 for 1 rx queue on port 0
+*	core 3 for 0 tx queue on port 0
+*	core 4 for 1 tx queue on port 0
+*	core 5 for 0 rx queue on port 1
+*	core 6 for 1 rx queue on port 1
+*	core 7 for 0 tx queue on port 1, disble in pp test
+*	core 8 for 1 tx queue on port 1, disble in pp test
+**************************************************/
     RTE_LCORE_FOREACH_SLAVE(lcore_id)
     {
-        if(lcore_idx < nb_rx_lcore)
-        {
-            lc_args[lcore_id].port_id = port_id++;
-            lc_args[lcore_id].rx.is_rx_lcore = 1;
-        }
-        else
-        {
-            if(lcore_idx == nb_rx_lcore)
-            {
-                port_id = queue_id = 0;
-            }
-            lc_args[lcore_id].tx.mp = mbuf_pool;
-            lc_args[lcore_id].tx.queue_id = queue_id % NB_TXQ;
-            lc_args[lcore_id].rx.is_rx_lcore = 0;
-            lc_args[lcore_id].port_id = queue_id++ / NB_TXQ;
-            lc_args[lcore_id].speed = ginfo.Mbps * 1024 * 1024 / NB_TXQ;
-            lc_args[lcore_id].trace_idx = 0;
-        }
-        rte_eal_remote_launch(sender_lcore_main, (void*)&lc_args[lcore_id], lcore_id);
-        lcore_idx++;
+
+#ifdef PP_TEST
+				if( ( ((uint32_t)1<<lcore_id) & core_white_list ) == 0  ){
+						printf("--->PP-DBG: core#%u, disable in current test\n", lcore_id);
+						continue;			  
+				}
+#endif
+
+        lc_args[lcore_id].port_id = port_ids[lcore_id];
+        lc_args[lcore_id].rx.is_rx_lcore = (is_tx_core[lcore_id] == 0 ? 1 : 0);
+        lc_args[lcore_id].tx.mp = mbuf_pool;
+
+				//set send core's txq
+				if(lc_args[lcore_id].rx.is_rx_lcore == 0){
+        		lc_args[lcore_id].tx.queue_id = tx_queue_id;
+        		lc_args[lcore_id].speed = ginfo.Mbps * 1024 * 1024;// / NB_TXQ;
+        		lc_args[lcore_id].trace_idx = 0;
+				}
+
+				//debug core config
+				printf("--->PP-DBG: core#%u, ", lcore_id);
+				if( lc_args[lcore_id].rx.is_rx_lcore == 1){
+						printf("rx core, ");
+						printf("work for port#%u, queue_id#%u\n", port_ids[lcore_id], rx_queue_id);
+						rx_queue_id = (rx_queue_id + 1) % NB_RXQ;
+				}
+				else{
+						printf("tx core, ");
+						printf("work for port#%u, queue_id#%u\n", port_ids[lcore_id], tx_queue_id);
+						tx_queue_id = (tx_queue_id + 1) % NB_TXQ;
+				}
     }
+
+		//final confirm
+		char start_cmd;
+		printf("[Press any key but 'q' to start sender...]\n");
+		start_cmd = getchar();
+		if(start_cmd == 'q'){
+				printf("Sender quit...\n");
+				return 0;
+		}
+		else{
+				printf("Sender ready to go...\n");
+		}
+		
+		//lunch task onto lcores and run
+		RTE_LCORE_FOREACH_SLAVE(lcore_id)
+		{
+#ifdef PP_TEST
+				if( ( ((uint32_t)1<<lcore_id) & core_white_list ) == 0  ){
+						continue;			  
+				}
+#endif
+        rte_eal_remote_launch(sender_lcore_main, (void*)&lc_args[lcore_id], lcore_id);
+		}
+
     print_stats(nb_ports);
     rte_eal_mp_wait_lcore();
     return 0;
