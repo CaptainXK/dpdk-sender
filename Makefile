@@ -47,7 +47,7 @@ APP = pkt-sender
 # all source are stored in SRCS-y
 SRCS-y := main.c tload.c tx_mp.c
 
-CFLAGS += -O3 -g
+CFLAGS += -O3 -g3
 CFLAGS += -Wextra -Wall -Werror
 #EXTRA_LDFLAGS += -std=gnu++11
 #EXTRA_LDFLAGS += `pkg-config --cflags --libs libndn-cxx`
