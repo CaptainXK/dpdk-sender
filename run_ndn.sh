@@ -38,7 +38,8 @@
 #t data file
 #s speed Mbps
 #L pkt length
-#T send rounds
-./build/pkt-sender -c 0xff -n 2 -- -t /home/xuke/pkt-sender-ts/data/pp/1_1000_match.traffic -s $1 -L 128 -T $2
-#./build/pkt-sender -c 0x0f -n 2 -- -t /home/xuke/pkt-sender-ts/data/2_1000.ipv4.test.match -s $1 -L 256 -T $2
-#./build/pkt-sender -c 0x0f -n 2 -- -t /home/xuke/pkt-sender-ts/data/name.trace -s $1 -L 256 -T $2
+TRACE_DIR="/home/xuke/git/gitlab/pkt-sender-ts/data"
+
+./build/pkt-sender -c 0x1ff -n 2 -- -t $TRACE_DIR/pp/1_1000_match.traffic -s $1 -L 256
+#./build/pkt-sender -c 0x7f -n 2 -- -t $TRACE_DIR/data/2_1000.ipv4.test.match -s $1 -L 256
+#./build/pkt-sender -c 0x7f -n 2 -- -t $TRACE_DIR/name.trace -s $1 -L 256
