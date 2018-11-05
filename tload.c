@@ -352,7 +352,7 @@ int load_pp_trace(const char *file, struct packet_model pms[])
             count++;
         }
     }
-    printf("total trace %d\n", count);
+    printf("--->PP-DBG:total trace %d\n", count);
     return count;
 }
 
@@ -369,7 +369,7 @@ int load_pp_trace_line(FILE *fp, struct packet_model *pm)
 	
 	if(nFields == 0 && nPackets ==0){
 		assert(fscanf(fp, "%d %d", &nFields, &nPackets));
-		printf("fields = %d, packets = %d\n", nFields, nPackets);
+		printf("--->PP-DBG:fields = %d, packets = %d\n", nFields, nPackets);
 	}
 	
 	//check eof
