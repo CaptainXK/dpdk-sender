@@ -39,7 +39,10 @@
 #s speed Mbps
 #L pkt length
 TRACE_DIR="/home/xuke/git/gitlab/pkt-sender-ts/data"
+PKT_SIZE=$2
 
-./build/pkt-sender -c 0x1ff -n 2 -- -t $TRACE_DIR/pp/1_1000_match.traffic -s $1 -L 256
-#./build/pkt-sender -c 0x7f -n 2 -- -t $TRACE_DIR/data/2_1000.ipv4.test.match -s $1 -L 256
-#./build/pkt-sender -c 0x7f -n 2 -- -t $TRACE_DIR/name.trace -s $1 -L 256
+echo "Test Packt Size=$PKT_SIZE Bytes"
+
+./build/pkt-sender -c 0x1ff -n 2 -- -t $TRACE_DIR/pp/1_1000_match.traffic -s $1 -L $PKT_SIZE
+#./build/pkt-sender -c 0x7f -n 2 -- -t $TRACE_DIR/data/2_1000.ipv4.test.match -s $1 -L $PKT_SIZE
+#./build/pkt-sender -c 0x7f -n 2 -- -t $TRACE_DIR/name.trace -s $1 -L $PKT_SIZE

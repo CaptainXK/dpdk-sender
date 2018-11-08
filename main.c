@@ -36,7 +36,7 @@
 #define NB_MBUF 65535
 #define MBUF_CACHE_SIZE 512
 #define NB_BURST 32//debug , original value is 32
-#define NB_TXQ 1
+#define NB_TXQ 3
 #define NB_RXQ 1
 
 #define NB_RXD_DFT 4096//debug, original value is 128
@@ -550,14 +550,15 @@ int main(int argc, char **argv)
     uint32_t lcore_id;
     uint32_t rx_queue_id;
 		uint32_t tx_queue_id;
-		uint32_t core_white_list = 0xf;
-		uint32_t port_ids[9] = {0, 0, 0, 1, 1, 1, 1, 1, 1};//idx core for port_ids[idx] port
-		uint32_t is_tx_core[9] = {0, 0, 1, 0, 1, 1, 1, 1, 1};//idx core is tx core whtn is_tx_core[idx] is 1
+		uint32_t core_white_list = 0x3f;
+		uint32_t port_ids[9]   = {0, 0, 0, 0, 0, 1, 1, 1, 1};//idx core for port_ids[idx] port, core#0 is master core and never conduct tx/rx
+		uint32_t is_tx_core[9] = {0, 0, 1, 1, 1, 0, 0, 1, 1};//idx core is tx core whtn is_tx_core[idx] is 1
     
 		rx_queue_id = tx_queue_id = 0;
 
 /***************************************************
 *	pp test
+* example 
 * core 0 is master core
 *	core 1 for 0 rx queue on port 0
 *	core 2 for 1 rx queue on port 0
