@@ -8,6 +8,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <inttypes.h>
+#include <sched.h>//sched_getcpu()
 
 #include <rte_common.h>
 #include <rte_cycles.h>
@@ -161,7 +162,7 @@ static int all_port_setup(struct rte_mempool *mp)
     int nb_ports;
     int port_id;
     int queue_id;
-    nb_ports = rte_eth_dev_count();
+    nb_ports = rte_eth_dev_count_avail();
 		
 		//debug, tx & rx conf, dev_info
 		struct rte_eth_dev_info dev_info;
@@ -318,6 +319,8 @@ static int sender_lcore_main(void *args)
 
     int i, j;
     
+		printf("[CPU#%d is working]\n",sched_getcpu());
+		
 		if(is_rx == 0)
     {
         printf("lcore#%u send packet from port %u - queue %u!\n", rte_lcore_id(), largs->port_id, largs->tx.queue_id);
@@ -550,9 +553,9 @@ int main(int argc, char **argv)
     uint32_t lcore_id;
     uint32_t rx_queue_id;
 		uint32_t tx_queue_id;
-		uint32_t core_white_list = 0x3f;
-		uint32_t port_ids[9]   = {0, 0, 0, 0, 0, 1, 1, 1, 1};//idx core for port_ids[idx] port, core#0 is master core and never conduct tx/rx
-		uint32_t is_tx_core[9] = {0, 0, 1, 1, 1, 0, 0, 1, 1};//idx core is tx core whtn is_tx_core[idx] is 1
+		uint32_t core_white_list = 0x1ff;
+		uint32_t port_ids[9] = {0, 0, 0, 0, 0, 1, 1, 1, 1};//core#idx for port_ids[idx] port, core#0 is master core and never conduct tx/rx
+		uint32_t is_tx_core[9] = {0, 0, 1, 1, 1, 0, 1, 1, 1};//idx core is tx core whtn is_tx_core[idx] is 1
     
 		rx_queue_id = tx_queue_id = 0;
 
