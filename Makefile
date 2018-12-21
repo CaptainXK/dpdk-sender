@@ -34,7 +34,7 @@ $(error "Please define RTE_SDK environment variable")
 endif
 
 #compiler
-CC := g++
+CC := gcc
 
 # Default target, can be overriden by command line or environment
 RTE_TARGET ?= x86_64-native-linuxapp-gcc
@@ -49,8 +49,5 @@ SRCS-y := main.c tload.c tx_mp.c
 
 CFLAGS += -O3 -g3
 CFLAGS += -Wextra -Wall -Werror
-#EXTRA_LDFLAGS += -std=gnu++11
-#EXTRA_LDFLAGS += `pkg-config --cflags --libs libndn-cxx`
-#CFLAGS += $(WERROR_FLAGS)
 
 include $(RTE_SDK)/mk/rte.extapp.mk
