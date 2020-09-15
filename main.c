@@ -528,10 +528,10 @@ int main(int argc, char **argv)
 //#else
 //    ret = load_vxlan_trace(ginfo.trace_file, pms);
 //#endif
-//	ret = load_ndn_trace(ginfo.trace_file, pms);//read data and put into pms
+  	ret = load_ndn_trace(ginfo.trace_file, pms);//read data and put into pms
 //	ret = load_trace(ginfo.trace_file, pms);//original test data
 //	ret = load_test_trace(ginfo.trace_file,pms);//liguo test data 
-		ret = load_pp_trace(ginfo.trace_file, pms);
+//	ret = load_pp_trace(ginfo.trace_file, pms);
 
 		if(ret <= 0){
 				printf("Sender exit for no trace loaded...\n");
