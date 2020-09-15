@@ -214,15 +214,15 @@ int load_ndn_trace_line(FILE *fp, struct packet_model *pm)
         tok[i] = strtok_r(s, " \t\n", &sp);
     }
 
-    uint8_t proto;
-    proto = (uint8_t)strtoul(tok[1], NULL, 0);
+    // uint8_t proto;
+    // proto = (uint8_t)strtoul(tok[1], NULL, 0);
 
-//    printf("proto=%d\n",proto); 
+    // printf("proto=%d\n",proto); 
 
-    if(proto != 66)
-    {
-        return INVALID_LINE;
-    }
+    // if(proto != 66)
+    // {
+    //     return INVALID_LINE;
+    // }
     
     memset(pm->ndn.ndn.name,0,400*sizeof(char));
     memcpy(pm->ndn.ndn.name,tok[0],strlen(tok[0]));    
