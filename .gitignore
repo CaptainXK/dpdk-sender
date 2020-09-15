@@ -2,4 +2,5 @@ build
 build/*
 data
 data/*
+cscope*
 
