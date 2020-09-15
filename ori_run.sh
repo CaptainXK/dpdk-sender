@@ -1,3 +1,0 @@
-# /bin/bash
-#send tcp or udp pkts, need modify the code where the function "tload_***_trace()" is scheduled in main.c...
-./build/pkt-sender -c 0x0f -n 4  -- -t /home/xuke/pkt-sender-ts/data/rss.trace -s $1 -L 512 -T $2

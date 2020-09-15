@@ -38,7 +38,7 @@
 #t data file
 #s speed Mbps
 #L pkt length
-TRACE_DIR="/home/xuke/git/gitlab/pkt-sender-ts/data"
+TRACE_DIR="${shell pwd}/data"
 PKT_SIZE=$2
 
 echo "Test Packt Size=$PKT_SIZE Bytes"
