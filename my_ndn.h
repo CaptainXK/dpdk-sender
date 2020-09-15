@@ -22,8 +22,8 @@ struct test_pkt{
 }__attribute__((__packed__));//size : 16+16+2+2+2+1+1*100=139
 
 struct pp_hdr{
-	struct ether_hdr eth;//16
-  uint8_t payload[32];//32
+	struct rte_ether_hdr eth;//16
+    uint8_t payload[32];//32
 	uint32_t action;//4
 	uint32_t id;//4
 }__attribute__((__packed__));// size = 16 + 32 + 4 + 4 = 56

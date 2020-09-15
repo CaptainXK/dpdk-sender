@@ -9,58 +9,7 @@
 #include <assert.h>
 #include "pm.h"
 
-#define DEBUG_PKT 0
-
 uint32_t pkt_length = 64;
-
-#if 0
-static void debug_pm(struct packet_model pm)
-{
-    printf("0x0000: %04X %04X %04X %04X %04X %04X %04X %04X\n",
-            ((uint16_t)pm.eth.d_addr.addr_bytes[0] << 8) | pm.eth.d_addr.addr_bytes[1],
-            ((uint16_t)pm.eth.d_addr.addr_bytes[2] << 8) | pm.eth.d_addr.addr_bytes[3],
-            ((uint16_t)pm.eth.d_addr.addr_bytes[4] << 8) | pm.eth.d_addr.addr_bytes[5],
-            ((uint16_t)pm.eth.s_addr.addr_bytes[0] << 8) | pm.eth.s_addr.addr_bytes[1],
-            ((uint16_t)pm.eth.s_addr.addr_bytes[2] << 8) | pm.eth.s_addr.addr_bytes[3],
-            ((uint16_t)pm.eth.s_addr.addr_bytes[4] << 8) | pm.eth.s_addr.addr_bytes[5],
-            ((uint16_t)ntohs(pm.eth.ether_type)),
-            ((uint16_t)pm.ip.version_ihl << 8) | pm.ip.type_of_service);
-    printf("0x0010: %04X %04X %04X %04X %04X %04X %04X %04X\n",
-            ntohs(pm.ip.total_length),
-            ntohs(pm.ip.packet_id),
-            ntohs(pm.ip.fragment_offset),
-            ((uint16_t)pm.ip.time_to_live << 8) | pm.ip.next_proto_id,
-            ntohs(pm.ip.hdr_checksum),
-            (uint16_t)(ntohl(pm.ip.src_addr) >> 16),
-            (uint16_t)(ntohl(pm.ip.src_addr) & 0xffff),
-            (uint16_t)(ntohl(pm.ip.dst_addr) >> 16));
-    printf("0x0020: %04X ", (uint16_t)(ntohl(pm.ip.dst_addr) & 0xffff));
-    if(pm.ip.next_proto_id == 6)
-    {
-        printf("%04X %04X %04X %04X %04X %04X %04X\n",
-                ntohs(pm.l4.tcp.hdr.src_port),
-                ntohs(pm.l4.tcp.hdr.dst_port),
-                ntohl(pm.l4.tcp.hdr.sent_seq) >> 16,
-                ntohl(pm.l4.tcp.hdr.sent_seq) & 0xffff,
-                ntohl(pm.l4.tcp.hdr.recv_ack) >> 16,
-                ntohl(pm.l4.tcp.hdr.recv_ack) & 0xffff,
-                ((uint16_t)pm.l4.tcp.hdr.data_off << 8) | pm.l4.tcp.hdr.tcp_flags);
-        
-        printf("0x0030: %04X %04X %04X\n",
-                ntohs(pm.l4.tcp.hdr.rx_win),
-                ntohs(pm.l4.tcp.hdr.cksum),
-                ntohs(pm.l4.tcp.hdr.tcp_urp));
-    }
-    else
-    {
-        printf("%04X %04X %04X %04X\n",
-                ntohs(pm.l4.udp.hdr.src_port),
-                ntohs(pm.l4.udp.hdr.dst_port),
-                ntohs(pm.l4.udp.hdr.dgram_len),
-                ntohs(pm.l4.udp.hdr.dgram_cksum));
-    }
-}
-#endif
 
 int load_trace_line(FILE *fp, struct packet_model *pm)
 {
@@ -110,7 +59,7 @@ int load_trace_line(FILE *fp, struct packet_model *pm)
         pm->tcp.tcp.dst_port = htons((uint16_t)strtoul(tok[3], NULL, 0));
         pm->tcp.tcp.sent_seq = htonl(1);
         pm->tcp.tcp.recv_ack = htonl(2);
-        pm->tcp.tcp.data_off = (uint8_t)(sizeof(struct tcp_hdr)>>2)<<4;
+        pm->tcp.tcp.data_off = (uint8_t)(sizeof(struct rte_tcp_hdr)>>2)<<4;
         pm->tcp.tcp.tcp_flags = (uint8_t)0x10;
         pm->tcp.tcp.rx_win = htons(0xffff);
         pm->tcp.tcp.cksum = 0;
@@ -143,7 +92,7 @@ int load_trace_line(FILE *fp, struct packet_model *pm)
 
         pm->udp.udp.src_port = htons((uint16_t)strtoul(tok[2], NULL, 0));
         pm->udp.udp.dst_port = htons((uint16_t)strtoul(tok[3], NULL, 0));
-        pm->udp.udp.dgram_len = htons((uint16_t)(pkt_length - 18 - sizeof(struct ipv4_hdr)));
+        pm->udp.udp.dgram_len = htons((uint16_t)(pkt_length - 18 - sizeof(struct rte_ipv4_hdr)));
         pm->udp.udp.dgram_cksum = 0;
         pm->udp.udp.dgram_cksum = rte_ipv4_udptcp_cksum(&(pm->udp.ip), (void*)&(pm->udp.udp));
         pm->is_udp = 1;
@@ -183,27 +132,27 @@ int load_vxlan_trace_line(FILE *fp, struct packet_model *pm)
     pm->vxlan.vx.vx_flags = htonl(0x08000000ULL);
     pm->vxlan.vx.vx_vni = htonl(vni << 8);
     //add udp hdr
-    struct udp_hdr *vx_udp_hdr = (struct udp_hdr*)(&(pm->vxlan.udp));
-    vx_udp_hdr->dst_port = htons(4789);
-    vx_udp_hdr->src_port = htons(9999);
-    vx_udp_hdr->dgram_len = htons(sizeof(struct vxlan_hdr) + sizeof(struct udp_hdr) + pkt_length - 4);
+    struct rte_udp_hdr *vx_rte_udp_hdr = (struct rte_udp_hdr*)(&(pm->vxlan.udp));
+    vx_rte_udp_hdr->dst_port = htons(4789);
+    vx_rte_udp_hdr->src_port = htons(9999);
+    vx_rte_udp_hdr->dgram_len = htons(sizeof(struct rte_vxlan_hdr) + sizeof(struct rte_udp_hdr) + pkt_length - 4);
     //add ip hdr
-    struct ipv4_hdr *vx_ip_hdr = (struct ipv4_hdr*)(&(pm->vxlan.ip));
+    struct rte_ipv4_hdr *vx_ip_hdr = (struct rte_ipv4_hdr*)(&(pm->vxlan.ip));
     vx_ip_hdr->version_ihl = 0x45;
-    vx_ip_hdr->total_length = htons(ntohs(vx_udp_hdr->dgram_len) + sizeof(struct ipv4_hdr));
+    vx_ip_hdr->total_length = htons(ntohs(vx_rte_udp_hdr->dgram_len) + sizeof(struct rte_ipv4_hdr));
     vx_ip_hdr->fragment_offset = htons(0x4000);
     vx_ip_hdr->next_proto_id = 17;
     vx_ip_hdr->hdr_checksum = rte_ipv4_cksum(vx_ip_hdr);
 
-    vx_udp_hdr->dgram_cksum = rte_ipv4_udptcp_cksum(vx_ip_hdr, (void*)vx_udp_hdr);
+    vx_rte_udp_hdr->dgram_cksum = rte_ipv4_udptcp_cksum(vx_ip_hdr, (void*)vx_rte_udp_hdr);
     //add ether hdr
     //
-    struct vlan_hdr *vl_hdr;
-    vl_hdr = (struct vlan_hdr*)(&(pm->vxlan.vlan));
+    struct rte_vlan_hdr *vl_hdr;
+    vl_hdr = (struct rte_vlan_hdr*)(&(pm->vxlan.vlan));
     vl_hdr->vlan_tci = 0;
     vl_hdr->eth_proto = htons(0x0800);
 
-    struct ether_hdr *vx_eth_hdr = (struct ether_hdr*)(&(pm->vxlan.eth));
+    struct rte_ether_hdr *vx_eth_hdr = (struct rte_ether_hdr*)(&(pm->vxlan.eth));
     vx_eth_hdr->ether_type = htons(0x8100);
 
     pm->is_vxlan = 1;
@@ -409,7 +358,7 @@ int load_pp_trace_line(FILE *fp, struct packet_model *pm)
 	pm->pp.pp_hdr.action = 0;
 
 	//set ether type to pass NIC hardware check, otherwise can not receive packets as expected	
-	pm->pp.pp_hdr.eth.ether_type = (uint16_t)(pkt_length - sizeof(struct ether_hdr));
+	pm->pp.pp_hdr.eth.ether_type = (uint16_t)(pkt_length - sizeof(struct rte_ether_hdr));
 	
 	pm->is_pp=1; 
   

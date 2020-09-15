@@ -150,7 +150,7 @@ struct rte_eth_conf port_conf =
 {
     .rxmode=
     {
-        .max_rx_pkt_len=ETHER_MAX_LEN,
+        .max_rx_pkt_len = RTE_ETHER_MAX_LEN,
 				.mq_mode = ETH_MQ_RX_RSS,//rss
     },
 };
