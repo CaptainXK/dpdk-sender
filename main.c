@@ -71,7 +71,7 @@ struct global_info ginfo =
 {
 	0,
 	"",
-    TX_RATE_DFT,
+  TX_RATE_DFT,
 };
 
 /* generate mbuf */
@@ -108,7 +108,8 @@ static void parse_params(int argc, char **argv)
                       }
 
 											printf("--->PP-DBG:Send rate set to %lluMbps\n", (unsigned long long)ginfo.Mbps);
-											/*res_data file*/
+											
+                      /*res_data file*/
 					  					sprintf(res_path, "res_%lu", ginfo.Mbps);
 					 						res_fp = fopen(res_path, "w");
 					 					  if(res_fp == NULL)
@@ -254,7 +255,7 @@ struct lcore_args
 
 struct lcore_args lc_args[RTE_MAX_LCORE];
 
-static void send_pkt_rate(__rte_unused struct rte_timer *timer, void *arg)
+static void send_pkt_rate (__rte_unused struct rte_timer *timer, void *arg)
 {
     struct lcore_args *largs = (struct lcore_args*)arg;
     struct rte_mempool *mp;
@@ -287,7 +288,7 @@ static void send_pkt_rate(__rte_unused struct rte_timer *timer, void *arg)
 
 static uint64_t calc_period(uint64_t speed)
 {
-    return (uint64_t) (((NB_BURST * (pkt_length + 20) * 8 * rte_get_tsc_hz()) / (double) speed) );
+    return (uint64_t) ( ( (NB_BURST * (pkt_length + 20) * 8 * rte_get_tsc_hz()) / (double) speed) * NB_TXQ);
 }
 
 static int sender_lcore_main(void *args)
@@ -411,10 +412,10 @@ static void print_stats(int nb_ports)
             time_diff = (cur_cyc - last_cyc) / (double)rte_get_tsc_hz();
             port_stats[i].tx_total = tx_total;
             port_stats[i].tx_pps = (uint64_t)((tx_total - tx_last_total) / time_diff);
-            port_stats[i].tx_mbps = port_stats[i].tx_pps * (frame_len) * 8 / (1000000);
+            port_stats[i].tx_mbps = port_stats[i].tx_pps * (frame_len) * 8 / (1<<20);
             port_stats[i].rx_total = rx_total;
             port_stats[i].rx_pps = (uint64_t)((rx_total - rx_last_total) / time_diff);
-            port_stats[i].rx_mbps = port_stats[i].rx_pps * (frame_len) * 8 / (1000000);
+            port_stats[i].rx_mbps = port_stats[i].rx_pps * (frame_len) * 8 / (1<<20);
 
         }
         last_cyc = rte_get_tsc_cycles();
@@ -504,7 +505,7 @@ int main(int argc, char **argv)
 		uint32_t tx_queue_id;
 		uint32_t core_white_list = 0x1ff;
 		uint32_t port_ids[9] = {0, 0, 0, 0, 0, 1, 1, 1, 1};//core#idx for port_ids[idx] port, core#0 is master core and never conduct tx/rx
-		uint32_t is_tx_core[9] = {0, 0, 1, 1, 1, 0, 1, 1, 1};//idx core is tx core whtn is_tx_core[idx] is 1
+		uint32_t is_tx_core[9] = {0, 0, 1, 1, 1, 0, 0, 0, 0};//idx core is tx core whtn is_tx_core[idx] is 1
     
 		rx_queue_id = tx_queue_id = 0;
 
