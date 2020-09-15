@@ -14,22 +14,9 @@
 extern "C"{
 #endif
 
-int load_trace_line(FILE *fp, struct packet_model *pm);
-int load_trace(const char *file, struct packet_model pms[]);
-
-
-int load_vxlan_trace_line(FILE *fp, struct packet_model *pm);
-int load_vxlan_trace(const char *file, struct packet_model pms[]);
-
-
 int load_ndn_trace_line(FILE *fp, struct packet_model *pm);
 int load_ndn_trace(const char *file, struct packet_model pms[]);
 
-int load_test_trace_line(FILE *fp, struct packet_model *pm);
-int load_test_trace(const char *file, struct packet_model pms[]);
-
-int load_pp_trace_line(FILE *fp, struct packet_model *pm);
-int load_pp_trace(const char *file, struct packet_model pms[]);
 #ifdef __cplusplus
 }
 #endif

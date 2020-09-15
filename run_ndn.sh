@@ -9,4 +9,4 @@ PKT_SIZE=$2
 
 echo "Test Packt Size=$PKT_SIZE Bytes"
 
-./build/pkt-sender -c 0x1ff -n 2 -- -t $TRACE_DIR/name.csv -s $SPEED -L $PKT_SIZE
+./build/pkt-sender -c 0x1ff -n 4 -w 3b:00.0 -w 3b:00.1  -- -t $TRACE_DIR/name.csv -s $SPEED -L $PKT_SIZE
