@@ -13,7 +13,7 @@ struct packet_model
     struct
     {
 		  struct my_ndn ndn;
-    }__attribute__((aligned(8))) ndn;
+    } ndn;
     
     int is_ndn;
 };
