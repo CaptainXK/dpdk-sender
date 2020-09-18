@@ -14,9 +14,6 @@ struct rte_mbuf* generate_mbuf(struct packet_model pm, struct rte_mempool *mp, u
 {
     struct rte_mbuf *m;
 
-    uint64_t cur_tsc;/*timestamp*/
-
-    cur_tsc = rte_rdtsc();/*timestamp*/
     m = rte_pktmbuf_alloc(mp);
     if(m == NULL)
     {
@@ -32,16 +29,6 @@ struct rte_mbuf* generate_mbuf(struct packet_model pm, struct rte_mempool *mp, u
             rte_exit(-1, "mbuf append ndn hdr failed!\n");
         }
         rte_memcpy(data, &(pm.ndn), sizeof(pm.ndn));
-		    ((struct my_ndn*)data)->tsc = cur_tsc;
-
-        /*send timestamp*/
-        // data = rte_pktmbuf_append(m, sizeof(uint64_t));
-        // if(data == NULL)
-        // {
-        //     rte_exit(-1, "mbuf append ndn timestamp failed!\n");
-        // }
-        // rte_memcpy(data, (char*)&(cur_tsc), sizeof(uint64_t));
-
 
 		    /*rest part of pkt*/
         data = rte_pktmbuf_append(m, pkt_length - sizeof(pm.ndn));
