@@ -34,11 +34,13 @@
 
 #define GEN_VXLAN
 
-#define NB_MBUF 65535
+// #define NB_MBUF 65535
+#define NB_MBUF ((1 << 18) - 1)
 #define MBUF_CACHE_SIZE 512
 #define NB_BURST 32//debug , original value is 32
-#define NB_TXQ 3
-#define NB_RXQ 1
+#define NB_TXQ 16
+#define NB_RXQ 16
+#define NB_MAX_PORTS 64
 
 #define NB_RXD_DFT 4096//debug, original value is 128
 #define NB_TXD_DFT 4096//debug, original value is 512
@@ -57,7 +59,6 @@ unsigned long long pp_tot_error = 0;
 #define TX_RATE_DFT 10000
 
 #define PRINT_GAP 2
-
 
 /* global data */
 struct global_info
@@ -80,6 +81,15 @@ struct packet_model pms[NB_MAX_PM];
 /* pkt length*/
 extern uint32_t pkt_length;
 
+/* tot txq_nb*/
+int tot_txq_nb = 0;
+
+struct port_config{
+  int port_id;
+  int rxq_nb;
+  int txq_nb;
+} tot_port_conf[NB_MAX_PORTS];
+
 static void usage()
 {
     printf("Usage: pkt-sender <EAL options> -- -t <trace_file> -s <Mbps> -L <pkt_length> -T <send_rounds>\n");
@@ -90,7 +100,7 @@ static void parse_params(int argc, char **argv)
 {
     char opt;
     int accept = 0;
-		char res_path[256]="";
+		// char res_path[256]="";
 
     while((opt = getopt(argc, argv, "t:s:L:")) != -1)
     {
@@ -109,14 +119,14 @@ static void parse_params(int argc, char **argv)
 
 											printf("--->PP-DBG:Send rate set to %lluMbps\n", (unsigned long long)ginfo.Mbps);
 											
-                      /*res_data file*/
-					  					sprintf(res_path, "res_%lu", ginfo.Mbps);
-					 						res_fp = fopen(res_path, "w");
-					 					  if(res_fp == NULL)
-					 					  {
-					 					    perror("Can not open res file");
-					 					    exit(1);
-					 					  }
+                      // /*res_data file*/
+					  					// sprintf(res_path, "res_%lu", ginfo.Mbps);
+					 						// res_fp = fopen(res_path, "w");
+					 					  // if(res_fp == NULL)
+					 					  // {
+					 					  //   perror("Can not open res file");
+					 					  //   exit(1);
+					 					  // }
                       break;
             case 'L':
                       pkt_length = (uint32_t)atoi(optarg);
@@ -149,67 +159,6 @@ struct rte_eth_conf port_conf =
 				.mq_mode = ETH_MQ_RX_RSS,//rss
     },
 };
-
-/* don't care about NUMA */
-static int all_port_setup(struct rte_mempool *mp)
-{
-    int ret;
-    int nb_ports;
-    int port_id;
-    int queue_id;
-    nb_ports = rte_eth_dev_count_avail();
-		
-		//debug, tx & rx conf, dev_info
-		struct rte_eth_dev_info dev_info;
-		struct rte_eth_txconf *tx_conf;
-		struct rte_eth_rxconf *rx_conf;
-
-    for(port_id = 0; port_id < nb_ports; port_id++)
-    {
-        ret = rte_eth_dev_configure(port_id, NB_RXQ, NB_TXQ, &port_conf);
-        if(ret < 0)
-        {
-            rte_exit(-1, "port %d configure failure!\n", port_id);
-        }
-        for(queue_id = 0; queue_id < NB_TXQ; queue_id++)
-        {
-						//modify tx thresh
-						rte_eth_dev_info_get(port_id, &dev_info);					
-						tx_conf = &dev_info.default_txconf;
-	//				tx_conf->tx_rs_thresh = 1024;
-	//				tx_conf->tx_free_thresh = 1024;			
-
-            ret = rte_eth_tx_queue_setup(port_id, queue_id, nb_txd, rte_eth_dev_socket_id(port_id), tx_conf);
-            if(ret != 0)
-            {
-                rte_exit(-1, "port %d tx queue setup failure!\n", port_id);
-            }
-        }
-        for(queue_id = 0; queue_id < NB_RXQ; queue_id++)
-        {
-						//modify rx thresh
-						rte_eth_dev_info_get(port_id, &dev_info);
-						rx_conf = &dev_info.default_rxconf;
-
-            ret = rte_eth_rx_queue_setup(port_id, queue_id, nb_rxd, rte_eth_dev_socket_id(port_id), rx_conf, mp);
-            if(ret != 0)
-            {
-                rte_exit(-1, "port %d rx queue setup failure!\n", port_id);
-            }
-        }
-     
-		    ret = rte_eth_dev_start(port_id);
-     
-        if(ret < 0)
-        {
-            rte_exit(-1, "port %d start failure!\n", port_id);
-        }
-    
-		    rte_eth_promiscuous_enable(port_id);
-    }
-   
-		 return nb_ports;
-}
 
 
 /* lcore main */
@@ -244,10 +193,12 @@ struct lcore_args
         struct rte_mempool *mp;
         uint32_t queue_id;
         struct rte_timer tim;
+        uint8_t is_tx_lcore;
     }tx;
     struct
     {
         uint8_t is_rx_lcore;
+        uint32_t queue_id;
     }rx;
     uint64_t speed;
     uint32_t trace_idx;
@@ -288,31 +239,30 @@ static void send_pkt_rate (__rte_unused struct rte_timer *timer, void *arg)
 
 static uint64_t calc_period(uint64_t speed)
 {
-    return (uint64_t) ( ( (NB_BURST * (pkt_length + 20) * 8 * rte_get_tsc_hz()) / (double) speed) * NB_TXQ);
+    return (uint64_t) ( ( (NB_BURST * (pkt_length + 20) * 8 * rte_get_tsc_hz()) / (double) speed) * tot_txq_nb);
 }
 
 static int sender_lcore_main(void *args)
 {
     struct rte_mbuf *rx_table[NB_BURST];
-    struct rte_mbuf *m;
+    // struct rte_mbuf *m;
     struct lcore_args *largs;
     uint8_t is_rx;
+    uint8_t is_tx;
+    uint16_t rxq_id;
     int ret;
-    struct my_ndn * ndn_hdr;//for ndn test
-		double cur_latency;
-		uint64_t cur_hz = rte_get_tsc_hz();
+    // struct my_ndn * ndn_hdr;//for ndn test
 		uint64_t __attribute__((unused)) recv_tsc;
-    uint64_t cur_test_round = 0;
 
     largs = (struct lcore_args*)args;
 
     is_rx = largs->rx.is_rx_lcore;
-
-    int i, j;
+    is_tx = largs->tx.is_tx_lcore;
+    rxq_id = (uint16_t)(largs->rx.queue_id);
     
-		printf("[CPU#%d is working]\n",sched_getcpu());
+		printf("[CPU#%d is working, is_rx==%d, is_tx=%d]\n",sched_getcpu(), is_rx, is_tx);
 		
-		if(is_rx == 0)
+		if(is_tx)
     {
         printf("lcore#%u send packet from port %u - queue %u!\n", rte_lcore_id(), largs->port_id, largs->tx.queue_id);
 
@@ -324,48 +274,41 @@ static int sender_lcore_main(void *args)
         printf("period %lu\n", period);
         rte_timer_reset(&largs->tx.tim, period, PERIODICAL, rte_lcore_id(), send_pkt_rate, largs);
     }
-    else
-    {
-        for(j = 0; j < NB_RXQ; j++)
-        {
-            port_stats[largs->port_id].rxq_stats[j].rx_total_pkts = 0;
-            port_stats[largs->port_id].rxq_stats[j].rx_last_total_pkts = 0;
-        }
-    }
+    
+    port_stats[largs->port_id].rxq_stats[rxq_id].rx_total_pkts = 0;
+    port_stats[largs->port_id].rxq_stats[rxq_id].rx_last_total_pkts = 0;
 
     for(;;) {
         if(is_rx) {
-            for(j = 0; j < NB_RXQ; j++) {
-                ret = rte_eth_rx_burst(largs->port_id, j, rx_table, NB_BURST*8);
-                port_stats[largs->port_id].rxq_stats[j].rx_total_pkts += ret;
+          ret = rte_eth_rx_burst(largs->port_id, largs->rx.queue_id, rx_table, NB_BURST*8);
+          port_stats[largs->port_id].rxq_stats[rxq_id].rx_total_pkts += ret;
 
-								recv_tsc = rte_rdtsc();
+				  recv_tsc = rte_rdtsc();
 
-								//receive end analyze
-								for(i=0; i<ret; i++){
-									m = rx_table[i];
-									rte_prefetch0(rte_pktmbuf_mtod(m,void *));
+				  // //receive end analyze
+				  // for(i=0; i<ret; i++){
+				  // 	m = rx_table[i];
+				  // 	rte_prefetch0(rte_pktmbuf_mtod(m,void *));
 		
-									//record test data for ndn test
-									ndn_hdr = rte_pktmbuf_mtod(m,struct my_ndn *);
-									cur_latency = (double)(recv_tsc - ndn_hdr->tsc)/(double)(cur_hz) * 1000;
-									if(cur_test_round < NB_TEST){
-										if(fprintf(res_fp, "%lf\n", cur_latency)){
-											cur_test_round+=1;
-										}
-									}
-									if(cur_test_round >= NB_TEST && res_fp != NULL)//test for NB_TEST pkts
-									{	
-										fclose(res_fp);
-										res_fp = NULL;
-									}
-						}
-        		while(ret > 0) {
-                	rte_pktmbuf_free(rx_table[--ret]);
-        		}
-        	}
+				  // 	//record test data for ndn test
+				  // 	ndn_hdr = rte_pktmbuf_mtod(m,struct my_ndn *);
+				  // 	cur_latency = (double)(recv_tsc - ndn_hdr->tsc)/(double)(cur_hz) * 1000;
+				  // 	if(cur_test_round < NB_TEST){
+				  // 		if(fprintf(res_fp, "%lf\n", cur_latency)){
+				  // 			cur_test_round+=1;
+				  // 		}
+				  // 	}
+				  // 	if(cur_test_round >= NB_TEST && res_fp != NULL)//test for NB_TEST pkts
+				  // 	{	
+				  // 		fclose(res_fp);
+				  // 		res_fp = NULL;
+				  // 	}
+				  // }
+          while(ret > 0) {
+            rte_pktmbuf_free(rx_table[--ret]);
+          }
         }
-        else
+        if(is_tx)
         {
             rte_timer_manage();
         }
@@ -383,6 +326,8 @@ static void print_stats(int nb_ports)
     uint64_t rx_last_total;
     uint64_t last_cyc, cur_cyc;
     uint64_t frame_len;
+    int cur_rxq_nb = 0;
+    int cur_txq_nb = 0;
 	  
     /* framce size + premable + crc */
     frame_len  = pkt_length + 20;
@@ -396,13 +341,19 @@ static void print_stats(int nb_ports)
         {
             tx_total = tx_last_total = 0;
             rx_total = rx_last_total = 0;
-            for(j = 0; j < NB_TXQ; j++)
+            cur_rxq_nb = tot_port_conf[i].rxq_nb;
+            cur_txq_nb = tot_port_conf[i].txq_nb;
+
+            /* txq */
+            for(j = 0; j < cur_txq_nb; j++)
             {
                 tx_total += port_stats[i].txq_stats[j].tx_total_pkts;
                 tx_last_total += port_stats[i].txq_stats[j].tx_last_total_pkts;
                 port_stats[i].txq_stats[j].tx_last_total_pkts = port_stats[i].txq_stats[j].tx_total_pkts;
             }
-            for(j = 0; j < NB_RXQ; j++)
+
+            /* rxq */
+            for(j = 0; j < cur_rxq_nb; j++)
             {
                 rx_total += port_stats[i].rxq_stats[j].rx_total_pkts;
                 rx_last_total += port_stats[i].rxq_stats[j].rx_last_total_pkts;
@@ -435,6 +386,90 @@ static void print_stats(int nb_ports)
     }
 }
 
+static int one_port_setup(struct rte_mempool *mp, int port_id, int core_for_port_list[], int tx_core_list[], int core_nb)
+{
+    int ret;
+    int queue_id;
+    int rxq_nb = 0;
+    int txq_nb = 0;
+		
+		struct rte_eth_dev_info dev_info;
+		struct rte_eth_txconf *tx_conf;
+		struct rte_eth_rxconf *rx_conf;
+    
+    /* scan core_for_port and tx_core list */
+    for(int i = 1; i < core_nb; ++i){
+      if(core_for_port_list[i] == port_id){
+        /* all cores are rx core */
+        lc_args[i].port_id = port_id;
+        lc_args[i].rx.is_rx_lcore = 1;
+        lc_args[i].rx.queue_id = rxq_nb++;
+        lc_args[i].tx.mp = mp;
+
+        /* set tx core */
+        if(tx_core_list[i] == 1){
+          lc_args[i].tx.is_tx_lcore = 1;
+          lc_args[i].tx.queue_id = txq_nb++;
+          lc_args[i].speed = ginfo.Mbps * 1024 * 1024;
+          lc_args[i].trace_idx = 0;
+        }
+      }
+    }
+    
+    /* configure txq_nb and rxq_nb of port*/
+    ret = rte_eth_dev_configure(port_id, rxq_nb, txq_nb, &port_conf);
+    if(ret < 0)
+    {
+        rte_exit(-1, "port %d configure failure!\n", port_id);
+    }
+
+    /* set txq queue */
+    for(queue_id = 0; queue_id < txq_nb; queue_id++)
+    {
+				//modify tx thresh
+				rte_eth_dev_info_get(port_id, &dev_info);					
+				tx_conf = &dev_info.default_txconf;
+
+        ret = rte_eth_tx_queue_setup(port_id, queue_id, nb_txd, rte_eth_dev_socket_id(port_id), tx_conf);
+        if(ret != 0)
+        {
+            rte_exit(-1, "port %d tx queue setup failure!\n", port_id);
+        }
+    }
+
+    /* set rxq queue */
+    for(queue_id = 0; queue_id < rxq_nb; queue_id++)
+    {
+				//modify rx thresh
+				rte_eth_dev_info_get(port_id, &dev_info);
+				rx_conf = &dev_info.default_rxconf;
+
+        ret = rte_eth_rx_queue_setup(port_id, queue_id, nb_rxd, rte_eth_dev_socket_id(port_id), rx_conf, mp);
+        if(ret != 0)
+        {
+            rte_exit(-1, "port %d rx queue setup failure!\n", port_id);
+        }
+    }
+
+    /* update tot port conf */
+    tot_port_conf[port_id].port_id = port_id;
+    tot_port_conf[port_id].rxq_nb = rxq_nb;
+    tot_port_conf[port_id].txq_nb = txq_nb;
+
+    tot_txq_nb += txq_nb;
+    
+		ret = rte_eth_dev_start(port_id);
+    
+    if(ret < 0)
+    {
+        rte_exit(-1, "port %d start failure!\n", port_id);
+    }
+    
+    printf("Set promiscuous enable for %d\n", port_id);
+		rte_eth_promiscuous_enable(port_id);
+   
+		return ret;
+}
 
 int main(int argc, char **argv)
 {
@@ -452,8 +487,8 @@ int main(int argc, char **argv)
         rte_exit(-1, "create pktmbuf pool failure!\n");
     }
   
-	  int nb_ports;
-    nb_ports = all_port_setup(mbuf_pool);
+	  int nb_ports = rte_eth_dev_count_avail();;
+    // nb_ports = all_port_setup(mbuf_pool);
 		printf("--->PP-DBG:%d ports load\n", nb_ports);
     
 		if(nb_ports <= 0)
@@ -464,16 +499,8 @@ int main(int argc, char **argv)
     int lcore_nb;
     lcore_nb = rte_lcore_count();
 		printf("--->PP-DBG:%d cores load\n", lcore_nb);
-
-    if(lcore_nb < nb_ports)
-    {
-        rte_exit(-1, "lcore is less than needed! (should be %d)\n", nb_ports);
-    }
-    if(lcore_nb < nb_ports)
-    {
-        rte_exit(-1, "lcore is too much! (should be %d)\n", nb_ports);
-    }
-
+    
+    /* parse cmdline */
     parse_params(argc - ret, argv + ret);
 
 		printf("--->PP-DBG:Cmd parse done!\n");
@@ -494,65 +521,25 @@ int main(int argc, char **argv)
     {
         rte_exit(-1, "no invalid trace!\n");
     }
-
-    int __attribute__((unused))  nb_rx_lcore = nb_ports;
-//    int nb_tx_lcore = nb_ports * NB_TXQ;
-
-		printf("--->PP-DBG:%d ports in tatol\n", nb_ports);
     
     uint32_t lcore_id;
-    uint32_t rx_queue_id;
-		uint32_t tx_queue_id;
 		uint32_t core_white_list = 0x1ff;
-		uint32_t port_ids[9] = {0, 0, 0, 0, 0, 1, 1, 1, 1};//core#idx for port_ids[idx] port, core#0 is master core and never conduct tx/rx
-		uint32_t is_tx_core[9] = {0, 0, 1, 1, 1, 0, 0, 0, 0};//idx core is tx core whtn is_tx_core[idx] is 1
-    
-		rx_queue_id = tx_queue_id = 0;
+		int port_ids[9]   = {0, 0, 0, 0, 0, 1, 1, 1, 1};//core#idx for port_ids[idx] port, core#0 is master core and never conduct tx/rx
+		int is_tx_core[9] = {0, 0, 1, 1, 1, 0, 0, 0, 0};//idx core is tx core whtn is_tx_core[idx] is 1
+    for(int port_id = 0; port_id < nb_ports; ++port_id){
+      one_port_setup(mbuf_pool, port_id, port_ids, is_tx_core, lcore_nb);
+    }
 
-/***************************************************
-*	pp test
-* example 
-* core 0 is master core
-*	core 1 for 0 rx queue on port 0
-*	core 2 for 1 rx queue on port 0
-*	core 3 for 0 tx queue on port 0
-*	core 4 for 1 tx queue on port 0
-*	core 5 for 0 rx queue on port 1
-*	core 6 for 1 rx queue on port 1
-*	core 7 for 0 tx queue on port 1, disble in pp test
-*	core 8 for 1 tx queue on port 1, disble in pp test
-**************************************************/
-    RTE_LCORE_FOREACH_SLAVE(lcore_id)
-    {
-
-				if( ( ((uint32_t)1<<lcore_id) & core_white_list ) == 0  ){
-						printf("--->PP-DBG: core#%u, disable in current test\n", lcore_id);
-						continue;			  
-				}
-
-        lc_args[lcore_id].port_id = port_ids[lcore_id];
-        lc_args[lcore_id].rx.is_rx_lcore = (is_tx_core[lcore_id] == 0 ? 1 : 0);
-        lc_args[lcore_id].tx.mp = mbuf_pool;
-
-				//set send core's txq
-				if(lc_args[lcore_id].rx.is_rx_lcore == 0){
-        		lc_args[lcore_id].tx.queue_id = tx_queue_id;
-        		lc_args[lcore_id].speed = ginfo.Mbps * 1024 * 1024;// / NB_TXQ;
-        		lc_args[lcore_id].trace_idx = 0;
-				}
-
-				//debug core config
-				printf("--->PP-DBG: core#%u, ", lcore_id);
-				if( lc_args[lcore_id].rx.is_rx_lcore == 1){
-						printf("rx core, ");
-						printf("work for port#%u, queue_id#%u\n", port_ids[lcore_id], rx_queue_id);
-						rx_queue_id = (rx_queue_id + 1) % NB_RXQ;
-				}
-				else{
-						printf("tx core, ");
-						printf("work for port#%u, queue_id#%u\n", port_ids[lcore_id], tx_queue_id);
-						tx_queue_id = (tx_queue_id + 1) % NB_TXQ;
-				}
+    /* show core config */
+    RTE_LCORE_FOREACH_SLAVE(lcore_id){
+      printf("Core#%d, port_id=%d, rxq_id=%d, ", lcore_id, lc_args[lcore_id].port_id,
+                                                  lc_args[lcore_id].rx.queue_id);
+      if(is_tx_core[lcore_id]){
+        printf("txq_id=%d\n", lc_args[lcore_id].tx.queue_id);
+      }
+      else{
+        printf("txq_id=None\n");
+      }
     }
 
 		//final confirm
