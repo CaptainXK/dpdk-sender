@@ -27,7 +27,7 @@ int load_ndn_trace(const char *file, struct packet_model pms[])
             count++;
         }
     }
-    printf("total trace %d\n", count);
+    printf("total trace %d, pkt_length=%u\n", count, pkt_length);
     return count;
 }
 
@@ -49,7 +49,6 @@ int load_ndn_trace_line(FILE *fp, struct packet_model *pm)
     memcpy(pm->ndn.ndn.name,tok[0],strlen(tok[0]));
     pm->ndn.ndn.ether.ether_type = (uint16_t)(pkt_length - sizeof(struct rte_ether_hdr));
     pm->ndn.ndn.name_len = strlen(tok[0]);
-    pm->ndn.ndn.type=0;
     pm->is_ndn=1; 
     
     return VALID_LINE;
