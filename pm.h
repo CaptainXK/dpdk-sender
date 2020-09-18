@@ -12,8 +12,8 @@ struct packet_model
 {
     struct
     {
-		struct my_ndn ndn;
-    }__attribute__((__packed__)) ndn;
+		  struct my_ndn ndn;
+    }__attribute__((aligned(8))) ndn;
     
     int is_ndn;
 };

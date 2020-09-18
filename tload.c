@@ -46,7 +46,8 @@ int load_ndn_trace_line(FILE *fp, struct packet_model *pm)
     }
 
     memset(pm->ndn.ndn.name,0,400*sizeof(char));
-    memcpy(pm->ndn.ndn.name,tok[0],strlen(tok[0]));    
+    memcpy(pm->ndn.ndn.name,tok[0],strlen(tok[0]));
+    pm->ndn.ndn.ether.ether_type = (uint16_t)(pkt_length - sizeof(struct rte_ether_hdr));
     pm->ndn.ndn.name_len = strlen(tok[0]);
     pm->ndn.ndn.type=0;
     pm->is_ndn=1; 
