@@ -156,14 +156,22 @@ static void parse_params(int argc, char **argv)
 }
 /**************************************************************/
 
-/* port init */
-struct rte_eth_conf port_conf =
-{
-  .rxmode=
-  {
-    .max_rx_pkt_len = RTE_ETHER_MAX_LEN,
-				.mq_mode = ETH_MQ_RX_RSS,//rss
-  },
+static struct rte_eth_conf port_conf = {
+	.rxmode = {
+		.mq_mode = ETH_MQ_RX_RSS,
+		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
+		.split_hdr_size = 0,
+		.offloads = DEV_RX_OFFLOAD_CHECKSUM,
+	},
+	.rx_adv_conf = {
+		.rss_conf = {
+			.rss_key = NULL,
+			.rss_hf = ETH_RSS_IP,
+		},
+	},
+	.txmode = {
+		.mq_mode = ETH_MQ_TX_NONE,
+	},
 };
 
 /* lcore main */
