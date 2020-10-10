@@ -30,7 +30,7 @@
 #include "pm.h"
 #include "tload.h"
 #include "tx_mp.h"
-#include "my_ndn.h"
+#include "ndn_hdr.h"
 
 #define GEN_VXLAN
 
@@ -113,7 +113,7 @@ static void parse_params(int argc, char **argv)
       case 't': 
             printf("--->NDN-SENDER-DBG:Trace file=%s\n", optarg);
 						rte_memcpy(ginfo.trace_file, optarg, strlen(optarg)+1); 
-						accept = 1; 
+              accept = 1; 
 						break;
       case 's': 
             ginfo.Mbps = atoi(optarg);
@@ -133,9 +133,10 @@ static void parse_params(int argc, char **argv)
             break;
       case 'L':
             pkt_length = (uint32_t)atoi(optarg);
-            if(pkt_length < 64)
+            if(pkt_length < sizeof(struct ndn_hdr))
             {
-              rte_exit(EINVAL, "pkt_length should be no less than 64!\n");
+              rte_exit(EINVAL, "pkt_length should be no less than ndn hdr (%lu)!\n", 
+                                                                      sizeof(struct ndn_hdr));
             }
             printf("--->NDN-SENDER-DBG:Pkt size is %uB\n", pkt_length);
             break;
@@ -266,7 +267,7 @@ static int sender_lcore_main(void *args)
   uint8_t is_tx;
   uint16_t rxq_id;
   int ret;
-  // struct my_ndn * ndn_hdr;//for ndn test
+  // struct ndn_hdr * ndn_hdr;//for ndn test
 	uint64_t __attribute__((unused)) recv_tsc;
 
   largs = (struct lcore_args*)args;
@@ -306,7 +307,7 @@ static int sender_lcore_main(void *args)
 			// 	rte_prefetch0(rte_pktmbuf_mtod(m,void *));
       
 			// 	//record test data for ndn test
-			// 	ndn_hdr = rte_pktmbuf_mtod(m,struct my_ndn *);
+			// 	ndn_hdr = rte_pktmbuf_mtod(m,struct ndn_hdr *);
 			// 	cur_latency = (double)(recv_tsc - ndn_hdr->tsc)/(double)(cur_hz) * 1000;
 			// 	if(cur_test_round < NB_TEST){
 			// 		if(fprintf(res_fp, "%lf\n", cur_latency)){
