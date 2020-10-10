@@ -6,15 +6,15 @@
 #include <rte_udp.h>
 #include <rte_tcp.h>
 #include <rte_vxlan.h>
-#include "my_ndn.h"
+#include "ndn_hdr.h"
 
 struct packet_model
 {
     struct
     {
-		  struct my_ndn ndn;
+        struct ndn_hdr ndn;
     } ndn;
-    
+
     int is_ndn;
 };
 

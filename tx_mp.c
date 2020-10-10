@@ -8,7 +8,7 @@
 #include <rte_memory.h>
 #include <rte_mbuf.h>
 #include <rte_cycles.h>/*timestamp*/
-#include "my_ndn.h"
+#include "ndn_hdr.h"
 
 struct rte_mbuf* generate_mbuf(struct packet_model pm, struct rte_mempool *mp, uint32_t pkt_length)
 {
