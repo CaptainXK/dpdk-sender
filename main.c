@@ -398,6 +398,7 @@ static void print_stats(int nb_ports)
       printf("Port %d Statistics:\n", i);
       printf("tx rate: %llu pps\n", (unsigned long long)port_stats[i].tx_pps);
       printf("tx rate: %llu Mbps\n", (unsigned long long)port_stats[i].tx_mbps);
+      printf("       : %.2lf Gbps\n", (double)port_stats[i].tx_mbps / 1024);
       if((1<<i) & t_ports_map){
         for(j = 0; j < tot_port_conf[i].txq_nb; ++j){
         _pps =  (unsigned long long)(port_stats[i].txq_stats[j].last_batch / time_diff);
@@ -411,6 +412,7 @@ static void print_stats(int nb_ports)
 
       printf("rx rate: %llu pps\n", (unsigned long long)port_stats[i].rx_pps);
       printf("rx rate: %llu Mbps\n", (unsigned long long)port_stats[i].rx_mbps);
+      printf("       : %.2lf Gbps\n", (double)port_stats[i].rx_mbps / 1024);
       for(j = 0; j < tot_port_conf[i].rxq_nb; ++j){
         _pps =  (unsigned long long)(port_stats[i].rxq_stats[j].last_batch / time_diff);
         _mbps = (unsigned long long)(_pps * frame_len * 8 / (1<<20));
