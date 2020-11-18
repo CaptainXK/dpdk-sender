@@ -15,7 +15,7 @@ struct __attribute__((aligned)) ndn_hdr{
 #endif
 
   uint32_t name_len;
-  uint8_t name[256];
+  char name[256];
 };
 
 #endif
