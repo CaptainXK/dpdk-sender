@@ -511,13 +511,14 @@ static int one_port_setup(struct rte_mempool *mp, int port_id, int core_for_port
 
 void configure_core_port_map(int port_ids[], int is_tx_core[], int nb_cores, int nb_ports)
 {
-  int i = 0;
   const int cores_per_port = (int)((nb_cores - 1) / nb_ports);
   int cur_port = 0;
   int cores_count_one_port = 0;
+  uint32_t lcore_id;
 
-  for(i = 1; i < nb_cores; ++i){
-    port_ids[i] = cur_port;
+  
+  RTE_LCORE_FOREACH_SLAVE(lcore_id){
+    port_ids[lcore_id] = cur_port;
     cores_count_one_port += 1;
     if(cores_count_one_port == cores_per_port){
       cores_count_one_port = 0;
@@ -526,12 +527,12 @@ void configure_core_port_map(int port_ids[], int is_tx_core[], int nb_cores, int
   }
 
   printf("t_ports_map: 0x%lx\n", t_ports_map);
-  for(i = 1; i < nb_cores; ++i){
-    if( (1UL<<port_ids[i]) & t_ports_map ){
-      is_tx_core[i] = 1;
+  RTE_LCORE_FOREACH_SLAVE(lcore_id){
+    if( (1UL<<port_ids[lcore_id]) & t_ports_map ){
+      is_tx_core[lcore_id] = 1;
     }
     else{
-      is_tx_core[i] = 0;
+      is_tx_core[lcore_id] = 0;
     }
   }
 }
@@ -587,14 +588,14 @@ int main(int argc, char **argv)
   }
   
   uint32_t lcore_id;
-	uint32_t core_white_list = (1 << lcore_nb) - 1;
+	uint32_t core_white_list = 0x0;
 
-  /* core#idx for port_ids[idx] port, core#0 is master core and never conduct tx/rx */
-	// int port_ids[MAX_CORES]   = {0, 0, 0, 0, 0, 1, 1, 1, 1};
+  RTE_LCORE_FOREACH_SLAVE(lcore_id){
+    core_white_list |= 1U << lcore_id;
+  }
+
 	int port_ids[MAX_CORES]   = {0};
 
-  /* idx core is tx core whtn is_tx_core[idx] is 1 */
-	// int is_tx_core[MAX_CORES] = {0, 1, 1, 1, 1, 0, 0, 0, 0};
 	int is_tx_core[MAX_CORES] = {0};
 
   configure_core_port_map(port_ids, is_tx_core, lcore_nb, nb_ports);
