@@ -101,10 +101,62 @@ int load_ndn_trace(const char *file, struct packet_model pms[])
     return count;
 }
 
+int 
+get_name_comp(const char * name)
+{
+    int count = 0;
+    int i=0;
+    int len = strlen(name);
+
+    for(i=0; i < len; i++)
+    {
+        if(name[i] == '/')
+            count++;
+    }
+
+    return count;
+}
+
+void
+create_tlv_blk_vec(const char* name, int tot_comps, TBKLIST* name_tbkvec, uint8_t mid_comps)
+{
+    uint32_t offset = 0;
+    const char *p = name;
+
+    name_tbkvec->comps = tot_comps;
+    
+    if(mid_comps != 0) {
+        name_tbkvec->cur_comps = mid_comps;
+    }
+
+    int idx = 0;
+    while ( p && *p != '\0') {
+        // beginning of a component
+        if (*p == '/') {
+            name_tbkvec->tlv_block[idx].offset = offset;
+
+            // set the previous component's length
+            if(idx > 0){
+                name_tbkvec->tlv_block[idx - 1].length = name_tbkvec->tlv_block[idx].offset - 
+                                                        name_tbkvec->tlv_block[idx - 1].offset;
+            }
+            
+            // next component
+            idx++;
+        }
+
+        offset++;
+        p++;
+    }
+
+    name_tbkvec->tlv_block[tot_comps - 1].length = offset -
+                                            name_tbkvec->tlv_block[tot_comps - 1].offset;
+}
+
 int load_ndn_trace_line(FILE *fp, struct packet_model *pm)
 {
-    int i;
-    char buff[256];
+    int i = 0;
+    char buff[256] = "";
     char *tok[7], *s, *sp;
     if(fgets(buff, 256, fp) == NULL)
     {
@@ -130,10 +182,15 @@ int load_ndn_trace_line(FILE *fp, struct packet_model *pm)
 #endif
 
     /* ndn */
-    memset(pm->ndn.ndn.name,0,400*sizeof(char));
-    memcpy(pm->ndn.ndn.name,tok[0],strlen(tok[0]));
+    memset(pm->ndn.ndn.name, 0, 256 * sizeof(char));
+    memcpy(pm->ndn.ndn.name, tok[0], strlen(tok[0]));
     pm->ndn.ndn.name_len = strlen(tok[0]);
     pm->is_ndn=1; 
+
+    // /* init ndn tbk list */
+    // int tot_comps = 0;
+    // tot_comps = get_name_comp(pm->ndn.ndn.name);
+    // create_tlv_blk_vec(pm->ndn.ndn.name, tot_comps, &(pm->ndn.ndn.ndn_tbk_list), 0);
     
     return VALID_LINE;
 }

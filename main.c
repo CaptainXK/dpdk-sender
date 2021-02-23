@@ -345,8 +345,8 @@ static void print_stats(int nb_ports)
   int cur_rxq_nb = 0;
   int cur_txq_nb = 0;
 
-  /* framce size + premable + crc */
-  frame_len  = pkt_length + 20;
+  /* framce size + premable(8) + crc(4) + framce gap(12)*/
+  frame_len  = pkt_length + 24;
   double time_diff;
   last_cyc = rte_get_tsc_cycles();
   for(;;)
@@ -404,7 +404,7 @@ static void print_stats(int nb_ports)
         _pps =  (unsigned long long)(port_stats[i].txq_stats[j].last_batch / time_diff);
         _mbps = (unsigned long long)(_pps * frame_len * 8 / (1<<20));
 
-        printf("--->rxq#%d: %llu pps,\t%llu mbps\n", j, _pps, _mbps );
+        printf("--->txq#%d: %llu pps,\t%llu mbps\n", j, _pps, _mbps );
         }
       }
       printf("tx total: %llu\n", (unsigned long long)port_stats[i].tx_total);
@@ -425,7 +425,7 @@ static void print_stats(int nb_ports)
   }
 }
 
-static int one_port_setup(struct rte_mempool *mp, int port_id, int core_for_port_list[], int tx_core_list[], int core_nb)
+static int one_port_setup(struct rte_mempool *mp, int port_id, int core_for_port_list[], int tx_core_list[])
 {
   int ret;
   int queue_id;
@@ -437,7 +437,8 @@ static int one_port_setup(struct rte_mempool *mp, int port_id, int core_for_port
 		struct rte_eth_rxconf *rx_conf;
   
   /* scan core_for_port and tx_core list */
-  for(int i = 1; i < core_nb; ++i){
+  uint32_t i;
+  RTE_LCORE_FOREACH_SLAVE(i){
     if(core_for_port_list[i] == port_id){
       /* all cores are rx core */
       lc_args[i].port_id = port_id;
@@ -454,6 +455,8 @@ static int one_port_setup(struct rte_mempool *mp, int port_id, int core_for_port
       }
     }
   }
+  
+  printf("- - -> Port#%u, rxq=%d, txq=%d\n", port_id, rxq_nb, txq_nb);
   
   /* configure txq_nb and rxq_nb of port*/
   ret = rte_eth_dev_configure(port_id, rxq_nb, txq_nb, &port_conf);
@@ -516,9 +519,10 @@ void configure_core_port_map(int port_ids[], int is_tx_core[], int nb_cores, int
   int cores_count_one_port = 0;
   uint32_t lcore_id;
 
-  
+  printf("--->Cores=%d, Ports=%d, cores_per_port=%d\n", nb_cores, nb_ports, cores_per_port); 
   RTE_LCORE_FOREACH_SLAVE(lcore_id){
     port_ids[lcore_id] = cur_port;
+    printf("------>Core%u works for port#%d\n", lcore_id, port_ids[lcore_id]);
     cores_count_one_port += 1;
     if(cores_count_one_port == cores_per_port){
       cores_count_one_port = 0;
@@ -587,12 +591,13 @@ int main(int argc, char **argv)
     rte_exit(-1, "no invalid trace!\n");
   }
   
-  uint32_t lcore_id;
+  uint32_t lcore_id = 0;
 	uint32_t core_white_list = 0x0;
 
   RTE_LCORE_FOREACH_SLAVE(lcore_id){
-    core_white_list |= 1U << lcore_id;
+    core_white_list |= 1U << (lcore_id-1);
   }
+  printf("Port Mask = 0x%x\n", core_white_list);
 
 	int port_ids[MAX_CORES]   = {0};
 
@@ -601,7 +606,7 @@ int main(int argc, char **argv)
   configure_core_port_map(port_ids, is_tx_core, lcore_nb, nb_ports);
 
   for(int port_id = 0; port_id < nb_ports; ++port_id){
-    one_port_setup(mbuf_pool, port_id, port_ids, is_tx_core, lcore_nb);
+    one_port_setup(mbuf_pool, port_id, port_ids, is_tx_core);
   }
 
   /* show core config */
@@ -631,7 +636,7 @@ int main(int argc, char **argv)
 	//lunch task onto lcores and run
 	RTE_LCORE_FOREACH_SLAVE(lcore_id)
 	{
-		if( ( ((uint32_t)1<<lcore_id) & core_white_list ) == 0  ){
+		if( ( ((uint32_t)1<< (lcore_id-1)) & core_white_list ) == 0  ){
 			continue;			  
 		}
   rte_eal_remote_launch(sender_lcore_main, (void*)&lc_args[lcore_id], lcore_id);

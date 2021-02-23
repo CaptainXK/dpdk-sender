@@ -47,7 +47,7 @@ APP = pkt-sender
 # all source are stored in SRCS-y
 SRCS-y := main.c tload.c tx_mp.c
 
-CFLAGS += -O3 -g3
+CFLAGS += -O3 -g
 CFLAGS += -Wextra -Wall -Werror
 
 include $(RTE_SDK)/mk/rte.extapp.mk

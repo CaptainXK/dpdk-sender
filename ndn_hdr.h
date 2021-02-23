@@ -16,6 +16,7 @@ struct __attribute__((aligned)) ndn_hdr{
 
   uint32_t name_len;
   char name[256];
+  // TBKLIST ndn_tbk_list;
 };
 
 #endif
